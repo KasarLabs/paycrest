@@ -40,6 +40,11 @@ dependencies = [
 ]
 
 [[package]]
+name = "openzeppelin_upgrades"
+version = "0.20.0"
+source = "git+https://github.com/OpenZeppelin/cairo-contracts.git?tag=v0.20.0#7756fd1de2b4ebd239fa6e372d75535cea02e5e5"
+
+[[package]]
 name = "openzeppelin_utils"
 version = "0.20.0"
 source = "git+https://github.com/OpenZeppelin/cairo-contracts.git?tag=v0.20.0#7756fd1de2b4ebd239fa6e372d75535cea02e5e5"
@@ -49,8 +54,10 @@ name = "paycrest"
 version = "0.1.0"
 dependencies = [
  "openzeppelin_access",
+ "openzeppelin_introspection",
  "openzeppelin_security",
  "openzeppelin_token",
+ "openzeppelin_upgrades",
  "snforge_std",
 ]
 

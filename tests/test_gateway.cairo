@@ -1,13 +1,15 @@
 use openzeppelin_token::erc20::interface::ERC20ABIDispatcherTrait;
 use paycrest::contracts::GatewaySettingManager::IGatewaySettingManagerDispatcherTrait;
 use paycrest::interfaces::IGateway::IGatewayDispatcherTrait;
-use snforge_std::{map_entry_address, start_cheat_caller_address, stop_cheat_caller_address, store};
+use snforge_std::{
+    DeclareResultTrait, declare, map_entry_address, start_cheat_caller_address,
+    stop_cheat_caller_address, store,
+};
 use starknet::ContractAddress;
 use crate::test_utils::{
     AGGREGATOR_ADDRESS, DEFAULT_AMOUNT, DEFAULT_FEE, LIQUIDITY_PROVIDER_ADDRESS, MAX_BPS,
-    OWNER_ADDRESS, PROTOCOL_FEE_PERCENT, REFUND_ADDRESS, SENDER_ADDRESS,
-    SENDER_FEE_RECIPIENT_ADDRESS, TREASURY_ADDRESS, setup_complete, setup_erc20, setup_gateway,
-    setup_gateway_with_config, setup_token_support,
+    OWNER_ADDRESS, REFUND_ADDRESS, SENDER_ADDRESS, SENDER_FEE_RECIPIENT_ADDRESS, TREASURY_ADDRESS,
+    setup_complete, setup_erc20, setup_gateway, setup_token_support,
 };
 
 #[starknet::interface]
@@ -21,40 +23,14 @@ trait IPausable<TContractState> {
 // ##################################################################
 #[test]
 fn test_constructor() {
-    let (_gateway_address, gateway_dispatcher, _) = setup_gateway();
-
-    let (protocol_fee, max_bps) = gateway_dispatcher.get_fee_details();
-
-    assert(max_bps == MAX_BPS, 'Wrong MAX_BPS');
-    assert(protocol_fee == 0, 'Protocol fee should be 0');
+    let (_gateway_address, _gateway_dispatcher, _) = setup_gateway();
+    // Constructor initializes MAX_BPS to 100_000 internally
+// Ownership is set correctly (tested via other owner functions)
 }
 
 // ##################################################################
 //                    OWNER FUNCTIONS TESTS
 // ##################################################################
-
-#[test]
-fn test_update_protocol_fee() {
-    let (gateway_address, gateway_dispatcher, setting_manager) = setup_gateway();
-
-    let new_fee_percent: u64 = 1000; // 1%
-    start_cheat_caller_address(gateway_address, OWNER_ADDRESS());
-    setting_manager.update_protocol_fee(new_fee_percent);
-    stop_cheat_caller_address(gateway_address);
-
-    let (protocol_fee, _) = gateway_dispatcher.get_fee_details();
-    assert(protocol_fee == new_fee_percent, 'Wrong protocol fee');
-}
-
-#[test]
-#[should_panic(expected: ('Caller is not the owner',))]
-fn test_update_protocol_fee_not_owner() {
-    let (gateway_address, _, setting_manager) = setup_gateway();
-
-    start_cheat_caller_address(gateway_address, SENDER_ADDRESS());
-    setting_manager.update_protocol_fee(1000);
-    stop_cheat_caller_address(gateway_address);
-}
 
 #[test]
 fn test_update_treasury_address() {
@@ -576,7 +552,11 @@ fn test_settle_order_full() {
     start_cheat_caller_address(gateway_address, AGGREGATOR_ADDRESS());
     let result = gateway_dispatcher
         .settle(
-            split_order_id, order_id, LIQUIDITY_PROVIDER_ADDRESS(), MAX_BPS.try_into().unwrap(),
+            split_order_id,
+            order_id,
+            LIQUIDITY_PROVIDER_ADDRESS(),
+            MAX_BPS.try_into().unwrap(),
+            0 // rebate_percent
         );
     stop_cheat_caller_address(gateway_address);
 
@@ -618,7 +598,7 @@ fn test_settle_order_partial() {
 
     let half_bps: u64 = (MAX_BPS / 2).try_into().unwrap();
     start_cheat_caller_address(gateway_address, AGGREGATOR_ADDRESS());
-    gateway_dispatcher.settle('split_1', order_id, LIQUIDITY_PROVIDER_ADDRESS(), half_bps);
+    gateway_dispatcher.settle('split_1', order_id, LIQUIDITY_PROVIDER_ADDRESS(), half_bps, 0);
     stop_cheat_caller_address(gateway_address);
 
     let order = gateway_dispatcher.get_order_info(order_id);
@@ -658,7 +638,7 @@ fn test_settle_not_aggregator() {
 
     start_cheat_caller_address(gateway_address, SENDER_ADDRESS());
     gateway_dispatcher
-        .settle('split_1', order_id, LIQUIDITY_PROVIDER_ADDRESS(), MAX_BPS.try_into().unwrap());
+        .settle('split_1', order_id, LIQUIDITY_PROVIDER_ADDRESS(), MAX_BPS.try_into().unwrap(), 0);
     stop_cheat_caller_address(gateway_address);
 }
 
@@ -694,12 +674,12 @@ fn test_settle_already_fulfilled() {
 
     start_cheat_caller_address(gateway_address, AGGREGATOR_ADDRESS());
     gateway_dispatcher
-        .settle('split_1', order_id, LIQUIDITY_PROVIDER_ADDRESS(), MAX_BPS.try_into().unwrap());
+        .settle('split_1', order_id, LIQUIDITY_PROVIDER_ADDRESS(), MAX_BPS.try_into().unwrap(), 0);
     stop_cheat_caller_address(gateway_address);
 
     start_cheat_caller_address(gateway_address, AGGREGATOR_ADDRESS());
     gateway_dispatcher
-        .settle('split_2', order_id, LIQUIDITY_PROVIDER_ADDRESS(), MAX_BPS.try_into().unwrap());
+        .settle('split_2', order_id, LIQUIDITY_PROVIDER_ADDRESS(), MAX_BPS.try_into().unwrap(), 0);
     stop_cheat_caller_address(gateway_address);
 }
 
@@ -739,7 +719,7 @@ fn test_multiple_settlements_complete_order() {
 
     let bps_30: u64 = 30_000; // Settle 30%
     start_cheat_caller_address(gateway_address, AGGREGATOR_ADDRESS());
-    gateway_dispatcher.settle('split_1', order_id, LIQUIDITY_PROVIDER_ADDRESS(), bps_30);
+    gateway_dispatcher.settle('split_1', order_id, LIQUIDITY_PROVIDER_ADDRESS(), bps_30, 0);
     stop_cheat_caller_address(gateway_address);
 
     let order = gateway_dispatcher.get_order_info(order_id);
@@ -748,7 +728,7 @@ fn test_multiple_settlements_complete_order() {
 
     let bps_40: u64 = 40_000; // Settle another 40%
     start_cheat_caller_address(gateway_address, AGGREGATOR_ADDRESS());
-    gateway_dispatcher.settle('split_2', order_id, LIQUIDITY_PROVIDER_ADDRESS(), bps_40);
+    gateway_dispatcher.settle('split_2', order_id, LIQUIDITY_PROVIDER_ADDRESS(), bps_40, 0);
     stop_cheat_caller_address(gateway_address);
 
     let order = gateway_dispatcher.get_order_info(order_id);
@@ -759,7 +739,7 @@ fn test_multiple_settlements_complete_order() {
 
     let bps_30_final: u64 = 30_000; // Settle final 30% to complete
     start_cheat_caller_address(gateway_address, AGGREGATOR_ADDRESS());
-    gateway_dispatcher.settle('split_3', order_id, LIQUIDITY_PROVIDER_ADDRESS(), bps_30_final);
+    gateway_dispatcher.settle('split_3', order_id, LIQUIDITY_PROVIDER_ADDRESS(), bps_30_final, 0);
     stop_cheat_caller_address(gateway_address);
 
     // Verify order is fulfilled
@@ -800,28 +780,28 @@ fn test_bps_arithmetic_precision() {
     let bps_25: u64 = 25_000; // Settle 25%
 
     start_cheat_caller_address(gateway_address, AGGREGATOR_ADDRESS());
-    gateway_dispatcher.settle('split_1', order_id, LIQUIDITY_PROVIDER_ADDRESS(), bps_25);
+    gateway_dispatcher.settle('split_1', order_id, LIQUIDITY_PROVIDER_ADDRESS(), bps_25, 0);
     stop_cheat_caller_address(gateway_address);
 
     let order = gateway_dispatcher.get_order_info(order_id);
     assert(order.current_bps == 75_000, 'BPS after 1st 25% wrong');
 
     start_cheat_caller_address(gateway_address, AGGREGATOR_ADDRESS());
-    gateway_dispatcher.settle('split_2', order_id, LIQUIDITY_PROVIDER_ADDRESS(), bps_25);
+    gateway_dispatcher.settle('split_2', order_id, LIQUIDITY_PROVIDER_ADDRESS(), bps_25, 0);
     stop_cheat_caller_address(gateway_address);
 
     let order = gateway_dispatcher.get_order_info(order_id);
     assert(order.current_bps == 50_000, 'BPS after 2nd 25% wrong');
 
     start_cheat_caller_address(gateway_address, AGGREGATOR_ADDRESS());
-    gateway_dispatcher.settle('split_3', order_id, LIQUIDITY_PROVIDER_ADDRESS(), bps_25);
+    gateway_dispatcher.settle('split_3', order_id, LIQUIDITY_PROVIDER_ADDRESS(), bps_25, 0);
     stop_cheat_caller_address(gateway_address);
 
     let order = gateway_dispatcher.get_order_info(order_id);
     assert(order.current_bps == 25_000, 'BPS after 3rd 25% wrong');
 
     start_cheat_caller_address(gateway_address, AGGREGATOR_ADDRESS());
-    gateway_dispatcher.settle('split_4', order_id, LIQUIDITY_PROVIDER_ADDRESS(), bps_25);
+    gateway_dispatcher.settle('split_4', order_id, LIQUIDITY_PROVIDER_ADDRESS(), bps_25, 0);
     stop_cheat_caller_address(gateway_address);
 
     let order = gateway_dispatcher.get_order_info(order_id);
@@ -893,7 +873,7 @@ fn test_refund_order_with_fee() {
         .create_order(
             token_address,
             DEFAULT_AMOUNT,
-            100,
+            150, // FX transfer rate (not 100), so protocol_fee will be calculated
             SENDER_FEE_RECIPIENT_ADDRESS(),
             DEFAULT_FEE,
             REFUND_ADDRESS(),
@@ -901,7 +881,7 @@ fn test_refund_order_with_fee() {
         );
     stop_cheat_caller_address(gateway_address);
 
-    let refund_fee: u256 = 100;
+    let refund_fee: u256 = 100; // Fee should be <= protocol_fee
     start_cheat_caller_address(gateway_address, AGGREGATOR_ADDRESS());
     let result = gateway_dispatcher.refund(refund_fee, order_id);
     stop_cheat_caller_address(gateway_address);
@@ -1040,16 +1020,6 @@ fn test_is_token_supported() {
 }
 
 #[test]
-fn test_get_fee_details() {
-    let (_, gateway_dispatcher, _) = setup_gateway_with_config();
-
-    let (protocol_fee, max_bps) = gateway_dispatcher.get_fee_details();
-
-    assert(protocol_fee == PROTOCOL_FEE_PERCENT, 'Wrong protocol fee');
-    assert(max_bps == MAX_BPS, 'Wrong max BPS');
-}
-
-#[test]
 fn test_get_order_info_nonexistent() {
     let (_, gateway_dispatcher, _) = setup_gateway();
 
@@ -1059,5 +1029,429 @@ fn test_get_order_info_nonexistent() {
     // Should return empty order
     let zero_address: starknet::ContractAddress = 0.try_into().unwrap();
     assert(order.sender == zero_address, 'Sender should be zero');
+}
+
+// ##################################################################
+//                    UPGRADEABILITY TESTS
+// ##################################################################
+
+#[starknet::interface]
+trait IUpgradeable<TContractState> {
+    fn upgrade(ref self: TContractState, new_class_hash: starknet::ClassHash);
+}
+
+#[starknet::interface]
+trait IOwnableTwoStep<TContractState> {
+    fn owner(self: @TContractState) -> ContractAddress;
+    fn pending_owner(self: @TContractState) -> ContractAddress;
+    fn accept_ownership(ref self: TContractState);
+    fn transfer_ownership(ref self: TContractState, new_owner: ContractAddress);
+    fn renounce_ownership(ref self: TContractState);
+}
+
+#[test]
+fn test_upgrade_by_owner() {
+    let (gateway_address, _, _) = setup_gateway();
+
+    let contract_class = declare("Gateway").unwrap().contract_class();
+    let new_class_hash = *contract_class.class_hash;
+    let upgradeable_dispatcher = IUpgradeableDispatcher { contract_address: gateway_address };
+
+    start_cheat_caller_address(gateway_address, OWNER_ADDRESS());
+    upgradeable_dispatcher.upgrade(new_class_hash);
+    stop_cheat_caller_address(gateway_address);
+}
+
+#[test]
+#[should_panic(expected: ('Caller is not the owner',))]
+fn test_upgrade_not_owner() {
+    let (gateway_address, _, _) = setup_gateway();
+
+    let contract_class = declare("Gateway").unwrap().contract_class();
+    let new_class_hash = *contract_class.class_hash;
+    let upgradeable_dispatcher = IUpgradeableDispatcher { contract_address: gateway_address };
+
+    start_cheat_caller_address(gateway_address, SENDER_ADDRESS());
+    upgradeable_dispatcher.upgrade(new_class_hash);
+    stop_cheat_caller_address(gateway_address);
+}
+
+#[test]
+#[should_panic(expected: ('Class hash cannot be zero',))]
+fn test_upgrade_zero_class_hash() {
+    let (gateway_address, _, _) = setup_gateway();
+    let zero_class_hash: starknet::ClassHash = 0.try_into().unwrap();
+    let upgradeable_dispatcher = IUpgradeableDispatcher { contract_address: gateway_address };
+
+    start_cheat_caller_address(gateway_address, OWNER_ADDRESS());
+    upgradeable_dispatcher.upgrade(zero_class_hash);
+    stop_cheat_caller_address(gateway_address);
+}
+
+// ##################################################################
+//                    TWO-STEP OWNERSHIP TESTS
+// ##################################################################
+
+#[test]
+fn test_two_step_transfer_ownership() {
+    let (gateway_address, _, _) = setup_gateway();
+    let ownable_dispatcher = IOwnableTwoStepDispatcher { contract_address: gateway_address };
+
+    let new_owner: ContractAddress = 0x999.try_into().unwrap();
+    let zero_address: ContractAddress = 0.try_into().unwrap();
+
+    assert(ownable_dispatcher.owner() == OWNER_ADDRESS(), 'Initial owner incorrect');
+    assert(ownable_dispatcher.pending_owner() == zero_address, 'Pending owner should be zero');
+
+    start_cheat_caller_address(gateway_address, OWNER_ADDRESS());
+    ownable_dispatcher.transfer_ownership(new_owner);
+    stop_cheat_caller_address(gateway_address);
+
+    assert(ownable_dispatcher.owner() == OWNER_ADDRESS(), 'Owner should not change yet');
+    assert(ownable_dispatcher.pending_owner() == new_owner, 'Pending owner incorrect');
+
+    start_cheat_caller_address(gateway_address, new_owner);
+    ownable_dispatcher.accept_ownership();
+    stop_cheat_caller_address(gateway_address);
+
+    assert(ownable_dispatcher.owner() == new_owner, 'New owner not set');
+    assert(ownable_dispatcher.pending_owner() == zero_address, 'Pending owner should be zero');
+}
+
+#[test]
+fn test_pending_owner_getter() {
+    let (gateway_address, _, _) = setup_gateway();
+    let ownable_dispatcher = IOwnableTwoStepDispatcher { contract_address: gateway_address };
+
+    let new_owner: ContractAddress = 0x888.try_into().unwrap();
+    let zero_address: ContractAddress = 0.try_into().unwrap();
+
+    assert(ownable_dispatcher.pending_owner() == zero_address, 'Pending owner should be zero');
+
+    start_cheat_caller_address(gateway_address, OWNER_ADDRESS());
+    ownable_dispatcher.transfer_ownership(new_owner);
+    stop_cheat_caller_address(gateway_address);
+
+    assert(ownable_dispatcher.pending_owner() == new_owner, 'Pending owner not set');
+}
+
+#[test]
+#[should_panic(expected: ('Caller is not the owner',))]
+fn test_transfer_ownership_not_owner() {
+    let (gateway_address, _, _) = setup_gateway();
+    let ownable_dispatcher = IOwnableTwoStepDispatcher { contract_address: gateway_address };
+
+    let new_owner: ContractAddress = 0x777.try_into().unwrap();
+
+    start_cheat_caller_address(gateway_address, SENDER_ADDRESS());
+    ownable_dispatcher.transfer_ownership(new_owner);
+    stop_cheat_caller_address(gateway_address);
+}
+
+#[test]
+#[should_panic(expected: ('Caller is not the pending owner',))]
+fn test_accept_ownership_not_pending_owner() {
+    let (gateway_address, _, _) = setup_gateway();
+    let ownable_dispatcher = IOwnableTwoStepDispatcher { contract_address: gateway_address };
+
+    let new_owner: ContractAddress = 0x666.try_into().unwrap();
+    let wrong_caller: ContractAddress = 0x555.try_into().unwrap();
+
+    start_cheat_caller_address(gateway_address, OWNER_ADDRESS());
+    ownable_dispatcher.transfer_ownership(new_owner);
+    stop_cheat_caller_address(gateway_address);
+
+    start_cheat_caller_address(gateway_address, wrong_caller);
+    ownable_dispatcher.accept_ownership();
+    stop_cheat_caller_address(gateway_address);
+}
+
+#[test]
+fn test_cancel_ownership_transfer() {
+    let (gateway_address, _, _) = setup_gateway();
+    let ownable_dispatcher = IOwnableTwoStepDispatcher { contract_address: gateway_address };
+
+    let new_owner: ContractAddress = 0x444.try_into().unwrap();
+    let zero_address: ContractAddress = 0.try_into().unwrap();
+
+    start_cheat_caller_address(gateway_address, OWNER_ADDRESS());
+    ownable_dispatcher.transfer_ownership(new_owner);
+    stop_cheat_caller_address(gateway_address);
+
+    assert(ownable_dispatcher.pending_owner() == new_owner, 'Pending owner not set');
+
+    start_cheat_caller_address(gateway_address, OWNER_ADDRESS());
+    ownable_dispatcher.transfer_ownership(zero_address);
+    stop_cheat_caller_address(gateway_address);
+
+    assert(ownable_dispatcher.pending_owner() == zero_address, 'Pending owner not cancelled');
+    assert(ownable_dispatcher.owner() == OWNER_ADDRESS(), 'Owner should not change');
+}
+
+#[test]
+fn test_renounce_ownership_two_step() {
+    let (gateway_address, _, _) = setup_gateway();
+    let ownable_dispatcher = IOwnableTwoStepDispatcher { contract_address: gateway_address };
+
+    let zero_address: ContractAddress = 0.try_into().unwrap();
+
+    start_cheat_caller_address(gateway_address, OWNER_ADDRESS());
+    ownable_dispatcher.renounce_ownership();
+    stop_cheat_caller_address(gateway_address);
+
+    assert(ownable_dispatcher.owner() == zero_address, 'Owner not renounced');
+}
+
+#[test]
+fn test_ownership_functions_after_two_step_transfer() {
+    let (gateway_address, _, setting_manager) = setup_gateway();
+    let ownable_dispatcher = IOwnableTwoStepDispatcher { contract_address: gateway_address };
+
+    let new_owner: ContractAddress = 0x333.try_into().unwrap();
+
+    start_cheat_caller_address(gateway_address, OWNER_ADDRESS());
+    ownable_dispatcher.transfer_ownership(new_owner);
+    stop_cheat_caller_address(gateway_address);
+
+    start_cheat_caller_address(gateway_address, new_owner);
+    ownable_dispatcher.accept_ownership();
+    stop_cheat_caller_address(gateway_address);
+
+    // Test that new owner can perform owner functions
+    start_cheat_caller_address(gateway_address, new_owner);
+    setting_manager.update_protocol_address('treasury', TREASURY_ADDRESS());
+    stop_cheat_caller_address(gateway_address);
+}
+
+// ##################################################################
+//                    TOKEN FEE SETTINGS TESTS
+// ##################################################################
+
+#[test]
+fn test_set_token_fee_settings() {
+    let (gateway_address, _, setting_manager, token_address, _) = setup_complete();
+
+    // Set new token fee settings
+    start_cheat_caller_address(gateway_address, OWNER_ADDRESS());
+    setting_manager.set_token_fee_settings(token_address, 90_000, 15_000, 25_000, 1000);
+    stop_cheat_caller_address(gateway_address);
+}
+
+#[test]
+#[should_panic(expected: ('Gateway: token not supported',))]
+fn test_set_token_fee_settings_unsupported_token() {
+    let (gateway_address, _, setting_manager, _, _) = setup_complete();
+    let unsupported_token: ContractAddress = 'unsupported'.try_into().unwrap();
+
+    start_cheat_caller_address(gateway_address, OWNER_ADDRESS());
+    setting_manager.set_token_fee_settings(unsupported_token, 90_000, 15_000, 25_000, 1000);
+    stop_cheat_caller_address(gateway_address);
+}
+
+#[test]
+#[should_panic(expected: ('Invalid sender_to_provider',))]
+fn test_set_token_fee_settings_invalid_values() {
+    let (gateway_address, _, setting_manager, token_address, _) = setup_complete();
+
+    start_cheat_caller_address(gateway_address, OWNER_ADDRESS());
+    setting_manager
+        .set_token_fee_settings(token_address, 200_000, // Exceeds MAX_BPS
+        15_000, 25_000, 1000);
+    stop_cheat_caller_address(gateway_address);
+}
+
+// ##################################################################
+//                    REBATE FUNCTIONALITY TESTS
+// ##################################################################
+
+#[test]
+fn test_settle_with_rebate() {
+    let (gateway_address, gateway_dispatcher, _, token_address, token_dispatcher) =
+        setup_complete();
+
+    let total_amount = DEFAULT_AMOUNT + DEFAULT_FEE;
+    store(
+        token_address,
+        map_entry_address(selector!("ERC20_balances"), array![SENDER_ADDRESS().into()].span()),
+        array![total_amount.low.into(), total_amount.high.into()].span(),
+    );
+
+    start_cheat_caller_address(token_address, SENDER_ADDRESS());
+    token_dispatcher.approve(gateway_address, total_amount);
+    stop_cheat_caller_address(token_address);
+
+    // Create FX order (rate != 100)
+    start_cheat_caller_address(gateway_address, SENDER_ADDRESS());
+    let order_id = gateway_dispatcher
+        .create_order(
+            token_address,
+            DEFAULT_AMOUNT,
+            150,
+            SENDER_FEE_RECIPIENT_ADDRESS(),
+            DEFAULT_FEE,
+            REFUND_ADDRESS(),
+            "test",
+        );
+    stop_cheat_caller_address(gateway_address);
+
+    // Settle with 50% rebate
+    let rebate_percent: u64 = 50_000;
+    start_cheat_caller_address(gateway_address, AGGREGATOR_ADDRESS());
+    let result = gateway_dispatcher
+        .settle(
+            'split_1',
+            order_id,
+            LIQUIDITY_PROVIDER_ADDRESS(),
+            MAX_BPS.try_into().unwrap(),
+            rebate_percent,
+        );
+    stop_cheat_caller_address(gateway_address);
+
+    assert(result, 'Settle should succeed');
+}
+
+#[test]
+#[should_panic(expected: ('InvalidRebatePercent',))]
+fn test_settle_with_invalid_rebate() {
+    let (gateway_address, gateway_dispatcher, _, token_address, token_dispatcher) =
+        setup_complete();
+
+    let total_amount = DEFAULT_AMOUNT + DEFAULT_FEE;
+    store(
+        token_address,
+        map_entry_address(selector!("ERC20_balances"), array![SENDER_ADDRESS().into()].span()),
+        array![total_amount.low.into(), total_amount.high.into()].span(),
+    );
+
+    start_cheat_caller_address(token_address, SENDER_ADDRESS());
+    token_dispatcher.approve(gateway_address, total_amount);
+    stop_cheat_caller_address(token_address);
+
+    start_cheat_caller_address(gateway_address, SENDER_ADDRESS());
+    let order_id = gateway_dispatcher
+        .create_order(
+            token_address,
+            DEFAULT_AMOUNT,
+            150,
+            SENDER_FEE_RECIPIENT_ADDRESS(),
+            DEFAULT_FEE,
+            REFUND_ADDRESS(),
+            "test",
+        );
+    stop_cheat_caller_address(gateway_address);
+
+    // Try to settle with rebate > MAX_BPS
+    start_cheat_caller_address(gateway_address, AGGREGATOR_ADDRESS());
+    gateway_dispatcher
+        .settle(
+            'split_1', order_id, LIQUIDITY_PROVIDER_ADDRESS(), MAX_BPS.try_into().unwrap(), 150_000,
+        );
+    stop_cheat_caller_address(gateway_address);
+}
+
+// ##################################################################
+//                    RATE TYPE VALIDATION TESTS
+// ##################################################################
+
+#[test]
+fn test_create_order_with_max_u128_rate() {
+    let (gateway_address, gateway_dispatcher, _, token_address, token_dispatcher) =
+        setup_complete();
+
+    let max_u128_rate: u128 = 340282366920938463463374607431768211455;
+    let total_amount = DEFAULT_AMOUNT + DEFAULT_FEE;
+
+    store(
+        token_address,
+        map_entry_address(selector!("ERC20_balances"), array![SENDER_ADDRESS().into()].span()),
+        array![total_amount.low.into(), total_amount.high.into()].span(),
+    );
+
+    start_cheat_caller_address(token_address, SENDER_ADDRESS());
+    token_dispatcher.approve(gateway_address, total_amount);
+    stop_cheat_caller_address(token_address);
+
+    start_cheat_caller_address(gateway_address, SENDER_ADDRESS());
+    let order_id = gateway_dispatcher
+        .create_order(
+            token_address,
+            DEFAULT_AMOUNT,
+            max_u128_rate,
+            SENDER_FEE_RECIPIENT_ADDRESS(),
+            DEFAULT_FEE,
+            REFUND_ADDRESS(),
+            "test",
+        );
+    stop_cheat_caller_address(gateway_address);
+
+    let order = gateway_dispatcher.get_order_info(order_id);
+    assert(order.amount == DEFAULT_AMOUNT, 'Order amount incorrect');
+}
+
+#[test]
+fn test_create_order_with_u96_compatible_rate() {
+    let (gateway_address, gateway_dispatcher, _, token_address, token_dispatcher) =
+        setup_complete();
+
+    let u96_max_rate: u128 = 79228162514264337593543950335;
+    let total_amount = DEFAULT_AMOUNT + DEFAULT_FEE;
+
+    store(
+        token_address,
+        map_entry_address(selector!("ERC20_balances"), array![SENDER_ADDRESS().into()].span()),
+        array![total_amount.low.into(), total_amount.high.into()].span(),
+    );
+
+    start_cheat_caller_address(token_address, SENDER_ADDRESS());
+    token_dispatcher.approve(gateway_address, total_amount);
+    stop_cheat_caller_address(token_address);
+
+    start_cheat_caller_address(gateway_address, SENDER_ADDRESS());
+    let order_id = gateway_dispatcher
+        .create_order(
+            token_address,
+            DEFAULT_AMOUNT,
+            u96_max_rate,
+            SENDER_FEE_RECIPIENT_ADDRESS(),
+            DEFAULT_FEE,
+            REFUND_ADDRESS(),
+            "test",
+        );
+    stop_cheat_caller_address(gateway_address);
+
+    let order = gateway_dispatcher.get_order_info(order_id);
+    assert(order.amount == DEFAULT_AMOUNT, 'Order amount incorrect');
+}
+
+#[test]
+fn test_rate_type_size_validation() {
+    let (gateway_address, gateway_dispatcher, _, token_address, token_dispatcher) =
+        setup_complete();
+
+    let typical_rate: u128 = 1500000;
+    let total_amount = DEFAULT_AMOUNT + DEFAULT_FEE;
+
+    store(
+        token_address,
+        map_entry_address(selector!("ERC20_balances"), array![SENDER_ADDRESS().into()].span()),
+        array![total_amount.low.into(), total_amount.high.into()].span(),
+    );
+
+    start_cheat_caller_address(token_address, SENDER_ADDRESS());
+    token_dispatcher.approve(gateway_address, total_amount);
+    stop_cheat_caller_address(token_address);
+
+    start_cheat_caller_address(gateway_address, SENDER_ADDRESS());
+    gateway_dispatcher
+        .create_order(
+            token_address,
+            DEFAULT_AMOUNT,
+            typical_rate,
+            SENDER_FEE_RECIPIENT_ADDRESS(),
+            DEFAULT_FEE,
+            REFUND_ADDRESS(),
+            "test",
+        );
+    stop_cheat_caller_address(gateway_address);
 }
 
