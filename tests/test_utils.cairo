@@ -18,7 +18,13 @@ pub const ONE_ETH: u128 = 1_000_000_000_000_000_000;
 pub const DEFAULT_AMOUNT: u256 = 1_000_000_000_000_000_000; // 1 ETH
 pub const DEFAULT_FEE: u256 = 10_000_000_000_000_000; // 0.01 ETH
 pub const MAX_BPS: u256 = 100_000;
-pub const PROTOCOL_FEE_PERCENT: u64 = 500; // 0.5%
+pub const PROTOCOL_FEE_PERCENT: u64 = 500; // 0.5% - DEPRECATED but kept for compatibility
+
+// Token Fee Settings for Local Transfers (rate = 100)
+pub const SENDER_TO_PROVIDER: u64 = 80_000; // 80% of sender fee goes to provider
+pub const PROVIDER_TO_AGGREGATOR: u64 = 10_000; // 10% of provider's share goes to aggregator
+pub const SENDER_TO_AGGREGATOR: u64 = 20_000; // 20% of sender fee goes to aggregator (FX mode)
+pub const PROVIDER_TO_AGGREGATOR_FX: u64 = 500; // 0.5% of transaction amount (FX mode)
 
 // ##################################################################
 //                        ADDRESSES
@@ -94,11 +100,6 @@ pub fn setup_gateway_with_config() -> (
 ) {
     let (contract_address, gateway_dispatcher, setting_manager_dispatcher) = setup_gateway();
 
-    // Configure protocol fee
-    start_cheat_caller_address(contract_address, OWNER_ADDRESS());
-    setting_manager_dispatcher.update_protocol_fee(PROTOCOL_FEE_PERCENT);
-    stop_cheat_caller_address(contract_address);
-
     // Configure treasury address
     start_cheat_caller_address(contract_address, OWNER_ADDRESS());
     setting_manager_dispatcher.update_protocol_address('treasury', TREASURY_ADDRESS());
@@ -122,6 +123,25 @@ pub fn setup_token_support(
     stop_cheat_caller_address(gateway_address);
 }
 
+/// Configures token fee settings for local and FX transfers.
+/// Uses default fee configuration suitable for testing.
+pub fn configure_token_fee_settings(
+    gateway_address: ContractAddress,
+    setting_manager: IGatewaySettingManagerDispatcher,
+    token: ContractAddress,
+) {
+    start_cheat_caller_address(gateway_address, OWNER_ADDRESS());
+    setting_manager
+        .set_token_fee_settings(
+            token,
+            SENDER_TO_PROVIDER,
+            PROVIDER_TO_AGGREGATOR,
+            SENDER_TO_AGGREGATOR,
+            PROVIDER_TO_AGGREGATOR_FX,
+        );
+    stop_cheat_caller_address(gateway_address);
+}
+
 pub fn setup_complete() -> (
     ContractAddress,
     IGatewayDispatcher,
@@ -135,6 +155,9 @@ pub fn setup_complete() -> (
 
     // Whitelist token
     setup_token_support(gateway_address, setting_manager_dispatcher, token_address);
+
+    // Configure token fee settings for local and FX transfers
+    configure_token_fee_settings(gateway_address, setting_manager_dispatcher, token_address);
 
     (
         gateway_address,

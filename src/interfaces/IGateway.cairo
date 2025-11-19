@@ -15,7 +15,7 @@ pub struct OrderCreated {
     pub amount: u256,
     pub protocol_fee: u256,
     pub order_id: felt252,
-    pub rate: u256,
+    pub rate: u128,
     pub message_hash: ByteArray,
 }
 
@@ -28,6 +28,7 @@ pub struct OrderSettled {
     #[key]
     pub liquidity_provider: ContractAddress,
     pub settle_percent: u64,
+    pub rebate_percent: u64,
 }
 
 /// Emitted when an aggregator refunds a transaction.
@@ -36,6 +37,25 @@ pub struct OrderRefunded {
     pub fee: u256,
     #[key]
     pub order_id: felt252,
+}
+
+/// Emitted when a local transfer fee is split.
+#[derive(Drop, starknet::Event)]
+pub struct LocalTransferFeeSplit {
+    #[key]
+    pub order_id: felt252,
+    pub sender_amount: u256,
+    pub provider_amount: u256,
+    pub aggregator_amount: u256,
+}
+
+/// Emitted when an FX transfer fee is split.
+#[derive(Drop, starknet::Event)]
+pub struct FxTransferFeeSplit {
+    #[key]
+    pub order_id: felt252,
+    pub sender_amount: u256,
+    pub aggregator_amount: u256,
 }
 
 /// Emitted when the sender's fee is transferred.
@@ -78,7 +98,7 @@ pub trait IGateway<TContractState> {
         ref self: TContractState,
         token: ContractAddress,
         amount: u256,
-        rate: u256,
+        rate: u128,
         sender_fee_recipient: ContractAddress,
         sender_fee: u256,
         refund_address: ContractAddress,
@@ -92,6 +112,7 @@ pub trait IGateway<TContractState> {
         order_id: felt252,
         liquidity_provider: ContractAddress,
         settle_percent: u64,
+        rebate_percent: u64,
     ) -> bool;
 
     /// Refunds to the specified refundable address.
@@ -104,7 +125,4 @@ pub trait IGateway<TContractState> {
 
     /// Gets the details of an order.
     fn get_order_info(self: @TContractState, order_id: felt252) -> Order;
-
-    /// Gets the fee details of Gateway.
-    fn get_fee_details(self: @TContractState) -> (u64, u256);
 }

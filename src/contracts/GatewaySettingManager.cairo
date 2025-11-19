@@ -1,13 +1,29 @@
 use starknet::ContractAddress;
 
+/// Struct representing token-specific fee settings.
+#[derive(Drop, Serde, starknet::Store, Copy)]
+pub struct TokenFeeSettings {
+    pub sender_to_provider: u64,
+    pub provider_to_aggregator: u64,
+    pub sender_to_aggregator: u64,
+    pub provider_to_aggregator_fx: u64,
+}
+
 /// Interface for the GatewaySettingManager component.
 #[starknet::interface]
 pub trait IGatewaySettingManager<TContractState> {
     fn setting_manager_bool(
         ref self: TContractState, what: felt252, value: ContractAddress, status: u256,
     );
-    fn update_protocol_fee(ref self: TContractState, protocol_fee_percent: u64);
     fn update_protocol_address(ref self: TContractState, what: felt252, value: ContractAddress);
+    fn set_token_fee_settings(
+        ref self: TContractState,
+        token: ContractAddress,
+        sender_to_provider: u64,
+        provider_to_aggregator: u64,
+        sender_to_aggregator: u64,
+        provider_to_aggregator_fx: u64,
+    );
 }
 
 /// Component that manages the settings and configurations for the Gateway protocol.
@@ -16,6 +32,7 @@ pub mod GatewaySettingManagerComponent {
     use core::num::traits::Zero;
     use starknet::ContractAddress;
     use starknet::storage::*;
+    use super::TokenFeeSettings;
 
     #[storage]
     pub struct Storage {
@@ -24,14 +41,15 @@ pub mod GatewaySettingManagerComponent {
         pub treasury_address: ContractAddress,
         pub aggregator_address: ContractAddress,
         pub is_token_supported: Map<ContractAddress, u256>,
+        pub token_fee_settings: Map<ContractAddress, TokenFeeSettings>,
     }
 
     #[event]
     #[derive(Drop, starknet::Event)]
     pub enum Event {
         SettingManagerBool: SettingManagerBool,
-        ProtocolFeeUpdated: ProtocolFeeUpdated,
         ProtocolAddressUpdated: ProtocolAddressUpdated,
+        TokenFeeSettingsUpdated: TokenFeeSettingsUpdated,
     }
 
     /// Emitted when a setting is updated.
@@ -44,12 +62,6 @@ pub mod GatewaySettingManagerComponent {
         pub status: u256,
     }
 
-    /// Emitted when protocol fee is updated.
-    #[derive(Drop, starknet::Event)]
-    pub struct ProtocolFeeUpdated {
-        pub protocol_fee: u64,
-    }
-
     /// Emitted when a protocol address is updated.
     #[derive(Drop, starknet::Event)]
     pub struct ProtocolAddressUpdated {
@@ -57,6 +69,17 @@ pub mod GatewaySettingManagerComponent {
         pub what: felt252,
         #[key]
         pub address: ContractAddress,
+    }
+
+    /// Emitted when token fee settings are updated.
+    #[derive(Drop, starknet::Event)]
+    pub struct TokenFeeSettingsUpdated {
+        #[key]
+        pub token: ContractAddress,
+        pub sender_to_provider: u64,
+        pub provider_to_aggregator: u64,
+        pub sender_to_aggregator: u64,
+        pub provider_to_aggregator_fx: u64,
     }
 
     // ##################################################################
@@ -83,12 +106,45 @@ pub mod GatewaySettingManagerComponent {
             }
         }
 
-        /// Updates the protocol fee percentage.
-        fn update_protocol_fee(
-            ref self: ComponentState<TContractState>, protocol_fee_percent: u64,
+        /// Sets token-specific fee settings.
+        /// Requirements:
+        /// - The token must be supported.
+        /// - Fee percentages must be within valid ranges (<=MAX_BPS).
+        fn set_token_fee_settings(
+            ref self: ComponentState<TContractState>,
+            token: ContractAddress,
+            sender_to_provider: u64,
+            provider_to_aggregator: u64,
+            sender_to_aggregator: u64,
+            provider_to_aggregator_fx: u64,
         ) {
-            self.protocol_fee_percent.write(protocol_fee_percent);
-            self.emit(ProtocolFeeUpdated { protocol_fee: protocol_fee_percent });
+            let is_supported = self.is_token_supported.entry(token).read();
+            assert(is_supported == 1, 'Gateway: token not supported');
+
+            let max_bps: u64 = self.max_bps.read().try_into().unwrap();
+            assert(sender_to_provider <= max_bps, 'Invalid sender_to_provider');
+            assert(provider_to_aggregator <= max_bps, 'Invalid provider_to_aggregator');
+            assert(sender_to_aggregator <= max_bps, 'Invalid sender_to_aggregator');
+            assert(provider_to_aggregator_fx <= max_bps, 'Invalid provider_to_agg_fx');
+
+            let settings = TokenFeeSettings {
+                sender_to_provider,
+                provider_to_aggregator,
+                sender_to_aggregator,
+                provider_to_aggregator_fx,
+            };
+            self.token_fee_settings.entry(token).write(settings);
+
+            self
+                .emit(
+                    TokenFeeSettingsUpdated {
+                        token,
+                        sender_to_provider,
+                        provider_to_aggregator,
+                        sender_to_aggregator,
+                        provider_to_aggregator_fx,
+                    },
+                );
         }
 
         /// Updates a protocol address.
@@ -154,6 +210,13 @@ pub mod GatewaySettingManagerComponent {
         ) -> bool {
             let status = self.is_token_supported.entry(token).read();
             status == 1
+        }
+
+        /// Gets token-specific fee settings.
+        fn get_token_fee_settings(
+            self: @ComponentState<TContractState>, token: ContractAddress,
+        ) -> TokenFeeSettings {
+            self.token_fee_settings.entry(token).read()
         }
     }
 }

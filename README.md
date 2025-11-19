@@ -12,6 +12,10 @@ A Cairo smart contract for Paycrest protocol, an escrow bridge for cross-platfor
 
 - **Multi-Token Support**: The contract works with any ERC20 token that's been whitelisted by the protocol.
 
+- **Rate Type Safety**: The `rate` parameter in `create_order` uses `u128` (compatible with Solidity's `uint96`)
+
+- **Dynamic Fee Structure**: Supports both local (same currency) and FX (foreign exchange) transfers with token-specific fee configurations and optional rebates for liquidity providers.
+
 ## Key Components
 
 - **Gateway.cairo**: The main contract handling orders, settlements, and refunds
@@ -22,6 +26,7 @@ Run `scarb build`
 
 ## Security Features
 
+- **Two-Step Ownership Transfer**: Uses OpenZeppelin's `OwnableTwoStep` pattern - the owner proposes a new owner, and the new owner must explicitly accept to prevent accidental transfers
 - Owner-controlled settings (only the owner can change fees or whitelist tokens)
 - Aggregator-only settlement and refund functions (only trusted aggregators can process orders)
 - Emergency pause mechanism 
@@ -29,11 +34,17 @@ Run `scarb build`
 
 ## Testing
 
-Includes a comprehensive test suite with 34 tests covering using snforge :
-- Order creation and escrow mechanics
+Includes a comprehensive test suite with 49 tests covering using snforge :
+- Order creation and escrow mechanics (local and FX transfers)
 - Partial and full settlements with precise BPS arithmetic
 - Refund flows with fee validation
 - Access control and security checks
 - Pause/unpause emergency functionality
+- Contract upgradeability and access control
+- Two-step ownership transfer mechanism
+- Rate parameter type validation (u128 enforcement)
+- Token-specific fee settings configuration
+- Rebate mechanism for liquidity providers
+- Fee splitting for local and FX transfers
 
 Run `scarb test`
