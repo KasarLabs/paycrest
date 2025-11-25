@@ -37,7 +37,6 @@ pub mod GatewaySettingManagerComponent {
     #[storage]
     pub struct Storage {
         pub max_bps: u256,
-        pub protocol_fee_percent: u64,
         pub treasury_address: ContractAddress,
         pub aggregator_address: ContractAddress,
         pub is_token_supported: Map<ContractAddress, u256>,
@@ -127,13 +126,13 @@ pub mod GatewaySettingManagerComponent {
             assert(sender_to_aggregator <= max_bps, 'Invalid sender_to_aggregator');
             assert(provider_to_aggregator_fx <= max_bps, 'Invalid provider_to_agg_fx');
 
-            let settings = TokenFeeSettings {
+            let fee_settings = TokenFeeSettings {
                 sender_to_provider,
                 provider_to_aggregator,
                 sender_to_aggregator,
                 provider_to_aggregator_fx,
             };
-            self.token_fee_settings.entry(token).write(settings);
+            self.token_fee_settings.entry(token).write(fee_settings);
 
             self
                 .emit(
@@ -187,11 +186,6 @@ pub mod GatewaySettingManagerComponent {
         /// Returns the max BPS value.
         fn get_max_bps(self: @ComponentState<TContractState>) -> u256 {
             self.max_bps.read()
-        }
-
-        /// Returns the protocol fee percent.
-        fn get_protocol_fee_percent(self: @ComponentState<TContractState>) -> u64 {
-            self.protocol_fee_percent.read()
         }
 
         /// Returns the treasury address.

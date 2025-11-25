@@ -198,9 +198,9 @@ pub mod Gateway {
                 0
             } else {
                 // FX transfer - use token-specific providerToAggregatorFx
-                let settings = self.gateway_setting_manager.get_token_fee_settings(token);
-                assert(settings.provider_to_aggregator_fx > 0, 'TokenFeeSettingsNotConfigured');
-                (amount * settings.provider_to_aggregator_fx.into()) / max_bps
+                let fee_settings = self.gateway_setting_manager.get_token_fee_settings(token);
+                assert(fee_settings.provider_to_aggregator_fx > 0, 'TokenFeeSettingsNotConfigured');
+                (amount * fee_settings.provider_to_aggregator_fx.into()) / max_bps
             };
 
             let new_order = Order {
@@ -279,13 +279,14 @@ pub mod Gateway {
                 / current_order_bps.into();
             order_data.amount -= liquidity_provider_amount;
 
+            let erc20 = IERC20Dispatcher { contract_address: order_data.token };
             if order_data.protocol_fee != 0 {
                 // FX transfer - use token-specific providerToAggregatorFx
-                let settings = self
+                let fee_settings = self
                     .gateway_setting_manager
                     .get_token_fee_settings(order_data.token);
                 let mut protocol_fee = (liquidity_provider_amount
-                    * settings.provider_to_aggregator_fx.into())
+                    * fee_settings.provider_to_aggregator_fx.into())
                     / max_bps;
                 liquidity_provider_amount -= protocol_fee;
 
@@ -297,13 +298,11 @@ pub mod Gateway {
                 }
 
                 // Transfer protocol fee to treasury
-                let erc20 = IERC20Dispatcher { contract_address: order_data.token };
                 let treasury = self.gateway_setting_manager.get_treasury_address();
                 erc20.transfer(treasury, protocol_fee);
             }
 
             // Transfer to liquidity provider
-            let erc20 = IERC20Dispatcher { contract_address: order_data.token };
             erc20.transfer(liquidity_provider, liquidity_provider_amount);
 
             self.order.entry(order_id).write(order_data);
@@ -331,8 +330,8 @@ pub mod Gateway {
             assert(!order_data.is_refunded, 'OrderRefunded');
             assert(order_data.protocol_fee >= fee, 'FeeExceedsProtocolFee');
 
+            let erc20 = IERC20Dispatcher { contract_address: order_data.token };
             if fee > 0 {
-                let erc20 = IERC20Dispatcher { contract_address: order_data.token };
                 let treasury = self.gateway_setting_manager.get_treasury_address();
                 erc20.transfer(treasury, fee);
             }
@@ -342,7 +341,6 @@ pub mod Gateway {
 
             let refund_amount = order_data.amount - fee;
 
-            let erc20 = IERC20Dispatcher { contract_address: order_data.token };
             let total_refund = refund_amount + order_data.sender_fee;
             erc20.transfer(order_data.refund_address, total_refund);
 
@@ -403,15 +401,15 @@ pub mod Gateway {
             settle_percent: u64,
         ) {
             let mut order_data = self.order.entry(order_id).read();
-            let settings = self.gateway_setting_manager.get_token_fee_settings(order_data.token);
+            let fee_settings = self.gateway_setting_manager.get_token_fee_settings(order_data.token);
             let sender_fee = order_data.sender_fee;
             let max_bps = self.gateway_setting_manager.get_max_bps();
 
             // Calculate splits based on config
-            let provider_amount = (sender_fee * settings.sender_to_provider.into()) / max_bps;
+            let provider_amount = (sender_fee * fee_settings.sender_to_provider.into()) / max_bps;
             let current_provider_amount = (provider_amount * settle_percent.into()) / max_bps;
             let aggregator_amount = (current_provider_amount
-                * settings.provider_to_aggregator.into())
+                * fee_settings.provider_to_aggregator.into())
                 / max_bps;
             let sender_amount = sender_fee - provider_amount;
 
@@ -455,12 +453,12 @@ pub mod Gateway {
         /// Handles fee splitting for FX transfers (rate != 100).
         fn _handle_fx_transfer_fee_splitting(ref self: ContractState, order_id: felt252) {
             let order_data = self.order.entry(order_id).read();
-            let settings = self.gateway_setting_manager.get_token_fee_settings(order_data.token);
+            let fee_settings = self.gateway_setting_manager.get_token_fee_settings(order_data.token);
             let sender_fee = order_data.sender_fee;
             let max_bps = self.gateway_setting_manager.get_max_bps();
 
             // Calculate sender portion based on senderToAggregator setting
-            let sender_amount = (sender_fee * (max_bps - settings.sender_to_aggregator.into()))
+            let sender_amount = (sender_fee * (max_bps - fee_settings.sender_to_aggregator.into()))
                 / max_bps;
             let aggregator_amount = sender_fee - sender_amount;
 
