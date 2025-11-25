@@ -15,7 +15,7 @@ openzeppelin_introspection = { git = "https://github.com/OpenZeppelin/cairo-cont
 
 [dev-dependencies]
 snforge_std = "0.51.1"
-assert_macros = "2.12.2"
+assert_macros = "2.13.1"
 
 [[target.starknet-contract]]
 sierra = true
