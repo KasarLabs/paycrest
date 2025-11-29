@@ -35,7 +35,7 @@ export const NETWORKS: { [chainId: string]: NetworkConfig } = {
    * Chain ID: SN_MAIN (0x534e5f4d41494e)
    */
   "SN_MAIN": {
-    rpcUrl: process.env.STARKNET_MAINNET_RPC_URL || "https://free-rpc.nethermind.io/mainnet-juno/v0_7",
+    rpcUrl: process.env.STARKNET_MAINNET_RPC_URL || "",
     explorerUrl: "https://starkscan.co",
     supportedTokens: {
       USDC: {
@@ -72,6 +72,7 @@ export const NETWORKS: { [chainId: string]: NetworkConfig } = {
         },
       },
     },
+    gatewayContract: "0x06ff3a3b1532da65594fc98f9ca7200af6c3dbaf37e7339b0ebd3b3f2390c583",
   },
 
   /**
