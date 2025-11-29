@@ -19,7 +19,7 @@
   "author": "Paycrest",
   "license": "MIT",
   "dependencies": {
-    "starknet": "^6.11.0",
+    "starknet": "^8.9.1",
     "dotenv": "^16.4.5"
   },
   "devDependencies": {

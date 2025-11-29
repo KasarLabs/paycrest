@@ -13,8 +13,8 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-// Get network from command line args or default to SN_SEPOLIA
-const network = process.argv[2] || "SN_SEPOLIA";
+// Get network from command line args or default to SN_MAIN
+const network = process.argv[2] || "SN_MAIN";
 
 assertEnvironment();
 
