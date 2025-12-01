@@ -68,7 +68,9 @@ export function getDeployerAccount(network: string): Account {
   const deployerAddress = process.env.DEPLOYER_ADDRESS!;
   const deployerPrivateKey = process.env.DEPLOYER_PRIVATE_KEY!;
 
-  return new Account(provider, deployerAddress, deployerPrivateKey, "1");
+  return new Account({
+    provider, address: deployerAddress, signer: deployerPrivateKey
+  });
 }
 
 /**
@@ -90,7 +92,11 @@ export async function getGatewayContract(
   // Load the compiled contract ABI
   const { sierra } = await loadCompiledContract("Gateway");
 
-  const contract = new Contract(sierra.abi, gatewayAddress, account);
+  const contract = new Contract({
+    abi: sierra.abi,
+    address: gatewayAddress,
+    providerOrAccount: account,
+  });
   
   return contract;
 }

@@ -1,3 +1,5 @@
+import { execSync } from 'child_process';
+
 import {
   assertEnvironment,
   getGatewayContract,
@@ -60,6 +62,14 @@ async function upgradeGateway() {
     console.log(`   Upgrade TX: ${upgradeTx.transaction_hash}`);
     console.log(`   Explorer: ${getExplorerUrl(network, upgradeTx.transaction_hash)}`);
     await waitForTransaction(provider, upgradeTx.transaction_hash);
+
+    const networkName = network === "SN_MAIN" ? "mainnet" : "sepolia";
+    
+    const verifyCommand = `sncast verify --class-hash ${newClassHash} --contract-name Gateway --verifier voyager --network ${networkName}`;
+      
+    console.log(`Running: ${verifyCommand}\n`);
+
+    execSync(verifyCommand, { stdio: 'inherit' });
 
     console.log("\n Gateway upgraded successfully!");
     console.log(`   Contract Address (unchanged): ${gatewayContract.address}`);

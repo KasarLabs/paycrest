@@ -1,4 +1,5 @@
-import { CallData, hash } from "starknet";
+import { CallData} from "starknet";
+import { execSync } from 'child_process';
 import {
   assertEnvironment,
   confirmContinue,
@@ -15,7 +16,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 // Get network from command line args or default to SN_SEPOLIA
-const network = process.argv[2] || "SN_SEPOLIA";
+const network = process.argv[2] || "SN_MAIN";
 
 assertEnvironment();
 
@@ -53,14 +54,16 @@ async function deployGateway() {
 
     // Declare the contract (if not already declared)
     console.log("[3/4] Declaring contract...");
-    
-    // Force V3 transaction and skip fee estimation
-    const declareResponse = await account.declare({
-      contract: sierra,
-      casm: casm,
-    }, {
-      skipValidate: true,  // Skip validation to avoid fee estimation issues
-    });
+
+    const declareResponse = await account.declareIfNot(
+      {
+        contract: sierra,
+        casm: casm,
+      },
+      {
+        version: 3,
+      }
+    );
 
     if (declareResponse.transaction_hash) {
       console.log(`   Declaration TX: ${declareResponse.transaction_hash}`);
@@ -74,10 +77,15 @@ async function deployGateway() {
     // Deploy the contract
     console.log("[4/4] Deploying contract...");
     
-    const deployResponse = await account.deployContract({
-      classHash: classHash,
-      constructorCalldata,
-    });
+    const deployResponse = await account.deployContract(
+      {
+        classHash: classHash,
+        constructorCalldata,
+      },
+      {
+        version: 3,
+      }
+    );
 
     console.log(`   Deployment TX: ${deployResponse.transaction_hash}`);
     console.log(`   Explorer: ${getExplorerUrl(network, deployResponse.transaction_hash)}`);
@@ -92,6 +100,20 @@ async function deployGateway() {
 
     // Update config file
     await updateConfigFile(network, contractAddress);
+
+    const networkName = network === "SN_MAIN" ? "mainnet" : "sepolia";
+
+    const verifyCommand = `sncast verify --class-hash ${classHash} --contract-name Gateway --verifier voyager --network ${networkName}`;
+      
+    console.log(`Running: ${verifyCommand}\n`);
+
+    execSync(verifyCommand, { stdio: 'inherit' });
+
+    console.log("\n✅ Contract verified successfully!");
+    const explorerUrl = network === "SN_MAIN" 
+      ? `https://voyager.online/contract/${contractAddress}`
+      : `https://sepolia.voyager.online/contract/${contractAddress}`;
+    console.log(`   View on Voyager: ${explorerUrl}`);
 
     console.log("\n=== Next steps ===");
     console.log("   1. Run 'npm run update-addresses' to set treasury and aggregator");
