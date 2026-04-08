@@ -8,8 +8,9 @@ use snforge_std::{
 use starknet::ContractAddress;
 use crate::test_utils::{
     AGGREGATOR_ADDRESS, DEFAULT_AMOUNT, DEFAULT_FEE, LIQUIDITY_PROVIDER_ADDRESS, MAX_BPS,
-    OWNER_ADDRESS, REFUND_ADDRESS, SENDER_ADDRESS, SENDER_FEE_RECIPIENT_ADDRESS, TREASURY_ADDRESS,
-    setup_complete, setup_erc20, setup_gateway, setup_token_support,
+    OWNER_ADDRESS, RECIPIENT_ADDRESS, REFUND_ADDRESS, SENDER_ADDRESS,
+    SENDER_FEE_RECIPIENT_ADDRESS, TREASURY_ADDRESS, setup_complete, setup_erc20, setup_gateway,
+    setup_gateway_with_config, setup_token_support,
 };
 
 #[starknet::interface]
@@ -551,12 +552,8 @@ fn test_settle_order_full() {
     let split_order_id: felt252 = 'split_123';
     start_cheat_caller_address(gateway_address, AGGREGATOR_ADDRESS());
     let result = gateway_dispatcher
-        .settle(
-            split_order_id,
-            order_id,
-            LIQUIDITY_PROVIDER_ADDRESS(),
-            MAX_BPS.try_into().unwrap(),
-            0 // rebate_percent
+        .settle_out(
+            split_order_id, order_id, LIQUIDITY_PROVIDER_ADDRESS(), MAX_BPS.try_into().unwrap(), 0,
         );
     stop_cheat_caller_address(gateway_address);
 
@@ -598,7 +595,7 @@ fn test_settle_order_partial() {
 
     let half_bps: u64 = (MAX_BPS / 2).try_into().unwrap();
     start_cheat_caller_address(gateway_address, AGGREGATOR_ADDRESS());
-    gateway_dispatcher.settle('split_1', order_id, LIQUIDITY_PROVIDER_ADDRESS(), half_bps, 0);
+    gateway_dispatcher.settle_out('split_1', order_id, LIQUIDITY_PROVIDER_ADDRESS(), half_bps, 0);
     stop_cheat_caller_address(gateway_address);
 
     let order = gateway_dispatcher.get_order_info(order_id);
@@ -638,7 +635,9 @@ fn test_settle_not_aggregator() {
 
     start_cheat_caller_address(gateway_address, SENDER_ADDRESS());
     gateway_dispatcher
-        .settle('split_1', order_id, LIQUIDITY_PROVIDER_ADDRESS(), MAX_BPS.try_into().unwrap(), 0);
+        .settle_out(
+            'split_1', order_id, LIQUIDITY_PROVIDER_ADDRESS(), MAX_BPS.try_into().unwrap(), 0,
+        );
     stop_cheat_caller_address(gateway_address);
 }
 
@@ -674,12 +673,16 @@ fn test_settle_already_fulfilled() {
 
     start_cheat_caller_address(gateway_address, AGGREGATOR_ADDRESS());
     gateway_dispatcher
-        .settle('split_1', order_id, LIQUIDITY_PROVIDER_ADDRESS(), MAX_BPS.try_into().unwrap(), 0);
+        .settle_out(
+            'split_1', order_id, LIQUIDITY_PROVIDER_ADDRESS(), MAX_BPS.try_into().unwrap(), 0,
+        );
     stop_cheat_caller_address(gateway_address);
 
     start_cheat_caller_address(gateway_address, AGGREGATOR_ADDRESS());
     gateway_dispatcher
-        .settle('split_2', order_id, LIQUIDITY_PROVIDER_ADDRESS(), MAX_BPS.try_into().unwrap(), 0);
+        .settle_out(
+            'split_2', order_id, LIQUIDITY_PROVIDER_ADDRESS(), MAX_BPS.try_into().unwrap(), 0,
+        );
     stop_cheat_caller_address(gateway_address);
 }
 
@@ -719,7 +722,7 @@ fn test_multiple_settlements_complete_order() {
 
     let bps_30: u64 = 30_000; // Settle 30%
     start_cheat_caller_address(gateway_address, AGGREGATOR_ADDRESS());
-    gateway_dispatcher.settle('split_1', order_id, LIQUIDITY_PROVIDER_ADDRESS(), bps_30, 0);
+    gateway_dispatcher.settle_out('split_1', order_id, LIQUIDITY_PROVIDER_ADDRESS(), bps_30, 0);
     stop_cheat_caller_address(gateway_address);
 
     let order = gateway_dispatcher.get_order_info(order_id);
@@ -728,7 +731,7 @@ fn test_multiple_settlements_complete_order() {
 
     let bps_40: u64 = 40_000; // Settle another 40%
     start_cheat_caller_address(gateway_address, AGGREGATOR_ADDRESS());
-    gateway_dispatcher.settle('split_2', order_id, LIQUIDITY_PROVIDER_ADDRESS(), bps_40, 0);
+    gateway_dispatcher.settle_out('split_2', order_id, LIQUIDITY_PROVIDER_ADDRESS(), bps_40, 0);
     stop_cheat_caller_address(gateway_address);
 
     let order = gateway_dispatcher.get_order_info(order_id);
@@ -739,7 +742,8 @@ fn test_multiple_settlements_complete_order() {
 
     let bps_30_final: u64 = 30_000; // Settle final 30% to complete
     start_cheat_caller_address(gateway_address, AGGREGATOR_ADDRESS());
-    gateway_dispatcher.settle('split_3', order_id, LIQUIDITY_PROVIDER_ADDRESS(), bps_30_final, 0);
+    gateway_dispatcher
+        .settle_out('split_3', order_id, LIQUIDITY_PROVIDER_ADDRESS(), bps_30_final, 0);
     stop_cheat_caller_address(gateway_address);
 
     // Verify order is fulfilled
@@ -780,28 +784,28 @@ fn test_bps_arithmetic_precision() {
     let bps_25: u64 = 25_000; // Settle 25%
 
     start_cheat_caller_address(gateway_address, AGGREGATOR_ADDRESS());
-    gateway_dispatcher.settle('split_1', order_id, LIQUIDITY_PROVIDER_ADDRESS(), bps_25, 0);
+    gateway_dispatcher.settle_out('split_1', order_id, LIQUIDITY_PROVIDER_ADDRESS(), bps_25, 0);
     stop_cheat_caller_address(gateway_address);
 
     let order = gateway_dispatcher.get_order_info(order_id);
     assert(order.current_bps == 75_000, 'BPS after 1st 25% wrong');
 
     start_cheat_caller_address(gateway_address, AGGREGATOR_ADDRESS());
-    gateway_dispatcher.settle('split_2', order_id, LIQUIDITY_PROVIDER_ADDRESS(), bps_25, 0);
+    gateway_dispatcher.settle_out('split_2', order_id, LIQUIDITY_PROVIDER_ADDRESS(), bps_25, 0);
     stop_cheat_caller_address(gateway_address);
 
     let order = gateway_dispatcher.get_order_info(order_id);
     assert(order.current_bps == 50_000, 'BPS after 2nd 25% wrong');
 
     start_cheat_caller_address(gateway_address, AGGREGATOR_ADDRESS());
-    gateway_dispatcher.settle('split_3', order_id, LIQUIDITY_PROVIDER_ADDRESS(), bps_25, 0);
+    gateway_dispatcher.settle_out('split_3', order_id, LIQUIDITY_PROVIDER_ADDRESS(), bps_25, 0);
     stop_cheat_caller_address(gateway_address);
 
     let order = gateway_dispatcher.get_order_info(order_id);
     assert(order.current_bps == 25_000, 'BPS after 3rd 25% wrong');
 
     start_cheat_caller_address(gateway_address, AGGREGATOR_ADDRESS());
-    gateway_dispatcher.settle('split_4', order_id, LIQUIDITY_PROVIDER_ADDRESS(), bps_25, 0);
+    gateway_dispatcher.settle_out('split_4', order_id, LIQUIDITY_PROVIDER_ADDRESS(), bps_25, 0);
     stop_cheat_caller_address(gateway_address);
 
     let order = gateway_dispatcher.get_order_info(order_id);
@@ -857,6 +861,7 @@ fn test_refund_order_with_fee() {
     let (gateway_address, gateway_dispatcher, _, token_address, token_dispatcher) =
         setup_complete();
 
+    // Use FX rate (200) so protocol_fee > 0, allowing refund with fee
     let total_amount = DEFAULT_AMOUNT + DEFAULT_FEE;
     store(
         token_address,
@@ -873,7 +878,7 @@ fn test_refund_order_with_fee() {
         .create_order(
             token_address,
             DEFAULT_AMOUNT,
-            150, // FX transfer rate (not 100), so protocol_fee will be calculated
+            200, // FX rate — generates a protocol fee
             SENDER_FEE_RECIPIENT_ADDRESS(),
             DEFAULT_FEE,
             REFUND_ADDRESS(),
@@ -1029,6 +1034,17 @@ fn test_get_order_info_nonexistent() {
     // Should return empty order
     let zero_address: starknet::ContractAddress = 0.try_into().unwrap();
     assert(order.sender == zero_address, 'Sender should be zero');
+}
+
+// ##################################################################
+//                    GET AGGREGATOR TESTS
+// ##################################################################
+#[test]
+fn test_get_aggregator() {
+    let (_, gateway_dispatcher, _) = setup_gateway_with_config();
+
+    let aggregator = gateway_dispatcher.get_aggregator();
+    assert(aggregator == AGGREGATOR_ADDRESS(), 'Wrong aggregator address');
 }
 
 // ##################################################################
@@ -1298,7 +1314,7 @@ fn test_settle_with_rebate() {
     let rebate_percent: u64 = 50_000;
     start_cheat_caller_address(gateway_address, AGGREGATOR_ADDRESS());
     let result = gateway_dispatcher
-        .settle(
+        .settle_out(
             'split_1',
             order_id,
             LIQUIDITY_PROVIDER_ADDRESS(),
@@ -1343,115 +1359,232 @@ fn test_settle_with_invalid_rebate() {
     // Try to settle with rebate > MAX_BPS
     start_cheat_caller_address(gateway_address, AGGREGATOR_ADDRESS());
     gateway_dispatcher
-        .settle(
+        .settle_out(
             'split_1', order_id, LIQUIDITY_PROVIDER_ADDRESS(), MAX_BPS.try_into().unwrap(), 150_000,
         );
     stop_cheat_caller_address(gateway_address);
 }
 
 // ##################################################################
-//                    RATE TYPE VALIDATION TESTS
+//                    SETTLE IN TESTS
 // ##################################################################
-
 #[test]
-fn test_create_order_with_max_u128_rate() {
+fn test_settle_in_local_success() {
     let (gateway_address, gateway_dispatcher, _, token_address, token_dispatcher) =
         setup_complete();
 
-    let max_u128_rate: u128 = 340282366920938463463374607431768211455;
+    let lp = LIQUIDITY_PROVIDER_ADDRESS();
+    let order_id: felt252 = 'settle_in_local_1';
     let total_amount = DEFAULT_AMOUNT + DEFAULT_FEE;
 
+    // Provision LP with tokens
     store(
         token_address,
-        map_entry_address(selector!("ERC20_balances"), array![SENDER_ADDRESS().into()].span()),
+        map_entry_address(selector!("ERC20_balances"), array![lp.into()].span()),
         array![total_amount.low.into(), total_amount.high.into()].span(),
     );
 
-    start_cheat_caller_address(token_address, SENDER_ADDRESS());
+    // LP approves gateway
+    start_cheat_caller_address(token_address, lp);
     token_dispatcher.approve(gateway_address, total_amount);
     stop_cheat_caller_address(token_address);
 
-    start_cheat_caller_address(gateway_address, SENDER_ADDRESS());
-    let order_id = gateway_dispatcher
-        .create_order(
+    // Execute local settle_in (rate=100)
+    start_cheat_caller_address(gateway_address, lp);
+    let result = gateway_dispatcher
+        .settle_in(
+            order_id,
             token_address,
             DEFAULT_AMOUNT,
-            max_u128_rate,
             SENDER_FEE_RECIPIENT_ADDRESS(),
             DEFAULT_FEE,
-            REFUND_ADDRESS(),
-            "test",
+            RECIPIENT_ADDRESS(),
+            100,
         );
     stop_cheat_caller_address(gateway_address);
 
+    assert(result, 'settle_in should succeed');
+
+    // Verify order state
     let order = gateway_dispatcher.get_order_info(order_id);
-    assert(order.amount == DEFAULT_AMOUNT, 'Order amount incorrect');
+    assert(order.sender == RECIPIENT_ADDRESS(), 'Wrong sender (recipient)');
+    assert(order.token == token_address, 'Wrong token');
+    assert(order.is_fulfilled, 'Should be fulfilled');
+    assert(order.protocol_fee == 0, 'Local should have no proto fee');
 }
 
 #[test]
-fn test_create_order_with_u96_compatible_rate() {
+fn test_settle_in_fx_success() {
     let (gateway_address, gateway_dispatcher, _, token_address, token_dispatcher) =
         setup_complete();
 
-    let u96_max_rate: u128 = 79228162514264337593543950335;
+    let lp = LIQUIDITY_PROVIDER_ADDRESS();
+    let order_id: felt252 = 'settle_in_fx_1';
     let total_amount = DEFAULT_AMOUNT + DEFAULT_FEE;
 
+    // Provision LP with tokens
     store(
         token_address,
-        map_entry_address(selector!("ERC20_balances"), array![SENDER_ADDRESS().into()].span()),
+        map_entry_address(selector!("ERC20_balances"), array![lp.into()].span()),
         array![total_amount.low.into(), total_amount.high.into()].span(),
     );
 
-    start_cheat_caller_address(token_address, SENDER_ADDRESS());
+    // LP approves gateway
+    start_cheat_caller_address(token_address, lp);
     token_dispatcher.approve(gateway_address, total_amount);
     stop_cheat_caller_address(token_address);
 
-    start_cheat_caller_address(gateway_address, SENDER_ADDRESS());
-    let order_id = gateway_dispatcher
-        .create_order(
+    // Execute FX settle_in (rate=200)
+    start_cheat_caller_address(gateway_address, lp);
+    let result = gateway_dispatcher
+        .settle_in(
+            order_id,
             token_address,
             DEFAULT_AMOUNT,
-            u96_max_rate,
             SENDER_FEE_RECIPIENT_ADDRESS(),
             DEFAULT_FEE,
-            REFUND_ADDRESS(),
-            "test",
+            RECIPIENT_ADDRESS(),
+            200,
         );
     stop_cheat_caller_address(gateway_address);
 
+    assert(result, 'settle_in FX should succeed');
+
+    // Verify order state
     let order = gateway_dispatcher.get_order_info(order_id);
-    assert(order.amount == DEFAULT_AMOUNT, 'Order amount incorrect');
+    assert(order.sender == RECIPIENT_ADDRESS(), 'Wrong sender (recipient)');
+    assert(order.is_fulfilled, 'Should be fulfilled');
+    assert(order.protocol_fee > 0, 'FX should have proto fee');
 }
 
 #[test]
-fn test_rate_type_size_validation() {
+#[should_panic(expected: ('OrderAlreadyExists',))]
+fn test_settle_in_duplicate_order() {
     let (gateway_address, gateway_dispatcher, _, token_address, token_dispatcher) =
         setup_complete();
 
-    let typical_rate: u128 = 1500000;
-    let total_amount = DEFAULT_AMOUNT + DEFAULT_FEE;
+    let lp = LIQUIDITY_PROVIDER_ADDRESS();
+    let order_id: felt252 = 'settle_in_dup';
+    let total_amount = (DEFAULT_AMOUNT + DEFAULT_FEE) * 2;
 
     store(
         token_address,
-        map_entry_address(selector!("ERC20_balances"), array![SENDER_ADDRESS().into()].span()),
+        map_entry_address(selector!("ERC20_balances"), array![lp.into()].span()),
         array![total_amount.low.into(), total_amount.high.into()].span(),
     );
 
-    start_cheat_caller_address(token_address, SENDER_ADDRESS());
+    start_cheat_caller_address(token_address, lp);
     token_dispatcher.approve(gateway_address, total_amount);
     stop_cheat_caller_address(token_address);
 
-    start_cheat_caller_address(gateway_address, SENDER_ADDRESS());
+    // First call succeeds
+    start_cheat_caller_address(gateway_address, lp);
     gateway_dispatcher
-        .create_order(
+        .settle_in(
+            order_id,
             token_address,
             DEFAULT_AMOUNT,
-            typical_rate,
             SENDER_FEE_RECIPIENT_ADDRESS(),
             DEFAULT_FEE,
-            REFUND_ADDRESS(),
-            "test",
+            RECIPIENT_ADDRESS(),
+            100,
+        );
+    stop_cheat_caller_address(gateway_address);
+
+    // Second call with same order_id should fail
+    start_cheat_caller_address(gateway_address, lp);
+    gateway_dispatcher
+        .settle_in(
+            order_id,
+            token_address,
+            DEFAULT_AMOUNT,
+            SENDER_FEE_RECIPIENT_ADDRESS(),
+            DEFAULT_FEE,
+            RECIPIENT_ADDRESS(),
+            100,
         );
     stop_cheat_caller_address(gateway_address);
 }
 
+#[test]
+#[should_panic(expected: ('InvalidAmount',))]
+fn test_settle_in_invalid_amount() {
+    let (gateway_address, gateway_dispatcher, _, token_address, _) = setup_complete();
+
+    let lp = LIQUIDITY_PROVIDER_ADDRESS();
+    let low_amount: u256 = MAX_BPS; // amount must be > MAX_BPS
+
+    start_cheat_caller_address(gateway_address, lp);
+    gateway_dispatcher
+        .settle_in(
+            'low_amt',
+            token_address,
+            low_amount,
+            SENDER_FEE_RECIPIENT_ADDRESS(),
+            DEFAULT_FEE,
+            RECIPIENT_ADDRESS(),
+            100,
+        );
+    stop_cheat_caller_address(gateway_address);
+}
+
+#[test]
+#[should_panic(expected: ('Pausable: paused',))]
+fn test_settle_in_when_paused() {
+    let (gateway_address, gateway_dispatcher, _, token_address, _) = setup_complete();
+    let pausable_dispatcher = IPausableDispatcher { contract_address: gateway_address };
+
+    start_cheat_caller_address(gateway_address, OWNER_ADDRESS());
+    pausable_dispatcher.pause();
+    stop_cheat_caller_address(gateway_address);
+
+    start_cheat_caller_address(gateway_address, LIQUIDITY_PROVIDER_ADDRESS());
+    gateway_dispatcher
+        .settle_in(
+            'paused_order',
+            token_address,
+            DEFAULT_AMOUNT,
+            SENDER_FEE_RECIPIENT_ADDRESS(),
+            DEFAULT_FEE,
+            RECIPIENT_ADDRESS(),
+            100,
+        );
+    stop_cheat_caller_address(gateway_address);
+}
+
+#[test]
+fn test_settle_in_anyone_can_call() {
+    let (gateway_address, gateway_dispatcher, _, token_address, token_dispatcher) =
+        setup_complete();
+
+    // Use a random address (not aggregator, not owner)
+    let random_caller: ContractAddress = 'random_user'.try_into().unwrap();
+    let order_id: felt252 = 'settle_in_anyone';
+    let total_amount = DEFAULT_AMOUNT + DEFAULT_FEE;
+
+    store(
+        token_address,
+        map_entry_address(selector!("ERC20_balances"), array![random_caller.into()].span()),
+        array![total_amount.low.into(), total_amount.high.into()].span(),
+    );
+
+    start_cheat_caller_address(token_address, random_caller);
+    token_dispatcher.approve(gateway_address, total_amount);
+    stop_cheat_caller_address(token_address);
+
+    // Any caller should be able to call settle_in
+    start_cheat_caller_address(gateway_address, random_caller);
+    let result = gateway_dispatcher
+        .settle_in(
+            order_id,
+            token_address,
+            DEFAULT_AMOUNT,
+            SENDER_FEE_RECIPIENT_ADDRESS(),
+            DEFAULT_FEE,
+            RECIPIENT_ADDRESS(),
+            100,
+        );
+    stop_cheat_caller_address(gateway_address);
+
+    assert(result, 'Anyone should be able to call');
+}
