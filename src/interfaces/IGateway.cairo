@@ -19,9 +19,9 @@ pub struct OrderCreated {
     pub message_hash: ByteArray,
 }
 
-/// Emitted when an aggregator settles a transaction.
+/// Emitted when an aggregator settles an offramp transaction.
 #[derive(Drop, starknet::Event)]
-pub struct OrderSettled {
+pub struct SettleOut {
     pub split_order_id: felt252,
     #[key]
     pub order_id: felt252,
@@ -29,6 +29,21 @@ pub struct OrderSettled {
     pub liquidity_provider: ContractAddress,
     pub settle_percent: u64,
     pub rebate_percent: u64,
+}
+
+/// Emitted when an onramp order is successfully processed.
+#[derive(Drop, starknet::Event)]
+pub struct SettleIn {
+    #[key]
+    pub order_id: felt252,
+    #[key]
+    pub liquidity_provider: ContractAddress,
+    #[key]
+    pub recipient: ContractAddress,
+    pub amount: u256,
+    pub token: ContractAddress,
+    pub aggregator_fee: u256,
+    pub rate: u256,
 }
 
 /// Emitted when an aggregator refunds a transaction.
@@ -62,6 +77,8 @@ pub struct FxTransferFeeSplit {
 #[derive(Drop, starknet::Event)]
 pub struct SenderFeeTransferred {
     #[key]
+    pub order_id: felt252,
+    #[key]
     pub sender: ContractAddress,
     #[key]
     pub amount: u256,
@@ -93,7 +110,7 @@ pub trait IGateway<TContractState> {
     //                        EXTERNAL CALLS
     // ##################################################################
 
-    /// creates an order for the sender and returns the order id
+    /// Creates an order for the sender and returns the order id.
     fn create_order(
         ref self: TContractState,
         token: ContractAddress,
@@ -105,8 +122,8 @@ pub trait IGateway<TContractState> {
         message_hash: ByteArray,
     ) -> felt252;
 
-    /// Settles a transaction and distributes rewards accordingly.
-    fn settle(
+    /// Settles an offramp transaction and distributes rewards accordingly.
+    fn settle_out(
         ref self: TContractState,
         split_order_id: felt252,
         order_id: felt252,
@@ -115,9 +132,19 @@ pub trait IGateway<TContractState> {
         rebate_percent: u64,
     ) -> bool;
 
+    /// Processes an onramp settlement. Open to any caller.
+    fn settle_in(
+        ref self: TContractState,
+        order_id: felt252,
+        token: ContractAddress,
+        amount: u256,
+        sender_fee_recipient: ContractAddress,
+        sender_fee: u256,
+        recipient: ContractAddress,
+        rate: u256,
+    ) -> bool;
+
     /// Refunds to the specified refundable address.
-    /// Requirements:
-    /// - Only aggregators can call this function.
     fn refund(ref self: TContractState, fee: u256, order_id: felt252) -> bool;
 
     /// Checks if a token is supported by Gateway.
@@ -125,4 +152,7 @@ pub trait IGateway<TContractState> {
 
     /// Gets the details of an order.
     fn get_order_info(self: @TContractState, order_id: felt252) -> Order;
+
+    /// Gets the address of the aggregator.
+    fn get_aggregator(self: @TContractState) -> ContractAddress;
 }

@@ -18,13 +18,12 @@ pub const ONE_ETH: u128 = 1_000_000_000_000_000_000;
 pub const DEFAULT_AMOUNT: u256 = 1_000_000_000_000_000_000; // 1 ETH
 pub const DEFAULT_FEE: u256 = 10_000_000_000_000_000; // 0.01 ETH
 pub const MAX_BPS: u256 = 100_000;
-pub const PROTOCOL_FEE_PERCENT: u64 = 500; // 0.5% - DEPRECATED but kept for compatibility
 
-// Token Fee Settings for Local Transfers (rate = 100)
-pub const SENDER_TO_PROVIDER: u64 = 80_000; // 80% of sender fee goes to provider
-pub const PROVIDER_TO_AGGREGATOR: u64 = 10_000; // 10% of provider's share goes to aggregator
-pub const SENDER_TO_AGGREGATOR: u64 = 20_000; // 20% of sender fee goes to aggregator (FX mode)
-pub const PROVIDER_TO_AGGREGATOR_FX: u64 = 500; // 0.5% of transaction amount (FX mode)
+// Token fee settings
+pub const SENDER_TO_PROVIDER: u256 = 50_000; // 50%
+pub const PROVIDER_TO_AGGREGATOR: u256 = 10_000; // 10%
+pub const SENDER_TO_AGGREGATOR: u256 = 20_000; // 20%
+pub const PROVIDER_TO_AGGREGATOR_FX: u256 = 500; // 0.5%
 
 // ##################################################################
 //                        ADDRESSES
@@ -63,6 +62,10 @@ pub fn TOKEN_ADDRESS() -> ContractAddress {
 
 pub fn GATEWAY_ADDRESS() -> ContractAddress {
     'gateway'.try_into().unwrap()
+}
+
+pub fn RECIPIENT_ADDRESS() -> ContractAddress {
+    'recipient'.try_into().unwrap()
 }
 
 // ##################################################################
@@ -123,9 +126,7 @@ pub fn setup_token_support(
     stop_cheat_caller_address(gateway_address);
 }
 
-/// Configures token fee settings for local and FX transfers.
-/// Uses default fee configuration suitable for testing.
-pub fn configure_token_fee_settings(
+pub fn setup_token_fee_settings(
     gateway_address: ContractAddress,
     setting_manager: IGatewaySettingManagerDispatcher,
     token: ContractAddress,
@@ -153,11 +154,9 @@ pub fn setup_complete() -> (
         setup_gateway_with_config();
     let (token_address, token_dispatcher) = setup_erc20();
 
-    // Whitelist token
+    // Whitelist token and configure fee settings
     setup_token_support(gateway_address, setting_manager_dispatcher, token_address);
-
-    // Configure token fee settings for local and FX transfers
-    configure_token_fee_settings(gateway_address, setting_manager_dispatcher, token_address);
+    setup_token_fee_settings(gateway_address, setting_manager_dispatcher, token_address);
 
     (
         gateway_address,
@@ -167,4 +166,3 @@ pub fn setup_complete() -> (
         token_dispatcher,
     )
 }
-
