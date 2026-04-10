@@ -2,10 +2,10 @@ use starknet::ContractAddress;
 
 #[derive(Drop, Serde, Copy, starknet::Store)]
 pub struct TokenFeeSettings {
-    pub sender_to_provider: u256,
-    pub provider_to_aggregator: u256,
-    pub sender_to_aggregator: u256,
-    pub provider_to_aggregator_fx: u256,
+    pub sender_to_provider: u64,
+    pub provider_to_aggregator: u64,
+    pub sender_to_aggregator: u64,
+    pub provider_to_aggregator_fx: u64,
 }
 
 /// Interface for the GatewaySettingManager component.
@@ -18,10 +18,10 @@ pub trait IGatewaySettingManager<TContractState> {
     fn set_token_fee_settings(
         ref self: TContractState,
         token: ContractAddress,
-        sender_to_provider: u256,
-        provider_to_aggregator: u256,
-        sender_to_aggregator: u256,
-        provider_to_aggregator_fx: u256,
+        sender_to_provider: u64,
+        provider_to_aggregator: u64,
+        sender_to_aggregator: u64,
+        provider_to_aggregator_fx: u64,
     );
 }
 
@@ -74,10 +74,10 @@ pub mod GatewaySettingManagerComponent {
     pub struct TokenFeeSettingsUpdated {
         #[key]
         pub token: ContractAddress,
-        pub sender_to_provider: u256,
-        pub provider_to_aggregator: u256,
-        pub sender_to_aggregator: u256,
-        pub provider_to_aggregator_fx: u256,
+        pub sender_to_provider: u64,
+        pub provider_to_aggregator: u64,
+        pub sender_to_aggregator: u64,
+        pub provider_to_aggregator_fx: u64,
     }
 
     // ##################################################################
@@ -111,15 +111,15 @@ pub mod GatewaySettingManagerComponent {
         fn set_token_fee_settings(
             ref self: ComponentState<TContractState>,
             token: ContractAddress,
-            sender_to_provider: u256,
-            provider_to_aggregator: u256,
-            sender_to_aggregator: u256,
-            provider_to_aggregator_fx: u256,
+            sender_to_provider: u64,
+            provider_to_aggregator: u64,
+            sender_to_aggregator: u64,
+            provider_to_aggregator_fx: u64,
         ) {
             let is_supported = self.is_token_supported.entry(token).read();
             assert(is_supported == 1, 'Gateway: token not supported');
 
-            let max = self.max_bps.read();
+            let max: u64 = self.max_bps.read().try_into().unwrap();
             assert(sender_to_provider <= max, 'Invalid sender_to_provider');
             assert(provider_to_aggregator <= max, 'Invalid provider_to_aggregator');
             assert(sender_to_aggregator <= max, 'Invalid sender_to_aggregator');
