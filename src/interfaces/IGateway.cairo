@@ -43,7 +43,7 @@ pub struct SettleIn {
     pub amount: u256,
     pub token: ContractAddress,
     pub aggregator_fee: u256,
-    pub rate: u256,
+    pub rate: u128,
 }
 
 /// Emitted when an aggregator refunds a transaction.
@@ -141,7 +141,7 @@ pub trait IGateway<TContractState> {
         sender_fee_recipient: ContractAddress,
         sender_fee: u256,
         recipient: ContractAddress,
-        rate: u256,
+        rate: u128,
     ) -> bool;
 
     /// Refunds to the specified refundable address.

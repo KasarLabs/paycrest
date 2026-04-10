@@ -336,7 +336,7 @@ pub mod Gateway {
             sender_fee_recipient: ContractAddress,
             sender_fee: u256,
             recipient: ContractAddress,
-            rate: u256,
+            rate: u128,
         ) -> bool {
             self.pausable.assert_not_paused();
 
