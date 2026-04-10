@@ -120,10 +120,10 @@ pub mod Gateway {
     fn set_token_fee_settings(
         ref self: ContractState,
         token: ContractAddress,
-        sender_to_provider: u256,
-        provider_to_aggregator: u256,
-        sender_to_aggregator: u256,
-        provider_to_aggregator_fx: u256,
+        sender_to_provider: u64,
+        provider_to_aggregator: u64,
+        sender_to_aggregator: u64,
+        provider_to_aggregator_fx: u64,
     ) {
         self.ownable.assert_only_owner();
         self
@@ -202,7 +202,7 @@ pub mod Gateway {
                 // FX transfer: use token-specific providerToAggregatorFx
                 let settings = self.gateway_setting_manager.get_token_fee_settings(token);
                 assert(settings.provider_to_aggregator_fx > 0, 'TokenFeeSettingsNotConfigured');
-                (amount * settings.provider_to_aggregator_fx) / max_bps
+                (amount * settings.provider_to_aggregator_fx.into()) / max_bps
             };
 
             let new_order = Order {
@@ -297,7 +297,7 @@ pub mod Gateway {
             if order_protocol_fee != 0 {
                 // FX transfer: use token-specific providerToAggregatorFx
                 let settings = self.gateway_setting_manager.get_token_fee_settings(order_token);
-                let mut aggregator_fee = (lp_amount * settings.provider_to_aggregator_fx) / max_bps;
+                let mut aggregator_fee = (lp_amount * settings.provider_to_aggregator_fx.into()) / max_bps;
                 lp_amount -= aggregator_fee;
 
                 if rebate_percent != 0 {
@@ -336,7 +336,7 @@ pub mod Gateway {
             sender_fee_recipient: ContractAddress,
             sender_fee: u256,
             recipient: ContractAddress,
-            rate: u256,
+            rate: u128,
         ) -> bool {
             self.pausable.assert_not_paused();
 
@@ -362,7 +362,7 @@ pub mod Gateway {
                 let settings = self.gateway_setting_manager.get_token_fee_settings(token);
                 assert(settings.provider_to_aggregator_fx > 0, 'TokenFeeSettingsNotConfigured');
 
-                aggregator_fee = (amount * settings.provider_to_aggregator_fx) / max_bps;
+                aggregator_fee = (amount * settings.provider_to_aggregator_fx.into()) / max_bps;
 
                 if aggregator_fee > 0 {
                     amount_to_settle -= aggregator_fee;
@@ -508,9 +508,9 @@ pub mod Gateway {
             let sender_fee = order_data.sender_fee;
             let token = order_data.token;
 
-            let provider_amount = (sender_fee * settings.sender_to_provider) / max_bps;
+            let provider_amount = (sender_fee * settings.sender_to_provider.into()) / max_bps;
             let current_provider_amount = (provider_amount * settle_percent.into()) / max_bps;
-            let aggregator_amount = (current_provider_amount * settings.provider_to_aggregator)
+            let aggregator_amount = (current_provider_amount * settings.provider_to_aggregator.into())
                 / max_bps;
             let sender_amount = sender_fee - provider_amount;
 
@@ -556,7 +556,7 @@ pub mod Gateway {
             let max_bps = self.gateway_setting_manager.get_max_bps();
             let treasury = self.gateway_setting_manager.get_treasury_address();
 
-            let sender_amount = (sender_fee * (max_bps - settings.sender_to_aggregator)) / max_bps;
+            let sender_amount = (sender_fee * (max_bps - settings.sender_to_aggregator.into())) / max_bps;
             let aggregator_amount = sender_fee - sender_amount;
 
             let erc20 = IERC20Dispatcher { contract_address: token };

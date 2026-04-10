@@ -20,10 +20,10 @@ pub const DEFAULT_FEE: u256 = 10_000_000_000_000_000; // 0.01 ETH
 pub const MAX_BPS: u256 = 100_000;
 
 // Token fee settings
-pub const SENDER_TO_PROVIDER: u256 = 50_000; // 50%
-pub const PROVIDER_TO_AGGREGATOR: u256 = 10_000; // 10%
-pub const SENDER_TO_AGGREGATOR: u256 = 20_000; // 20%
-pub const PROVIDER_TO_AGGREGATOR_FX: u256 = 500; // 0.5%
+pub const SENDER_TO_PROVIDER: u64 = 50_000; // 50%
+pub const PROVIDER_TO_AGGREGATOR: u64 = 10_000; // 10%
+pub const SENDER_TO_AGGREGATOR: u64 = 20_000; // 20%
+pub const PROVIDER_TO_AGGREGATOR_FX: u64 = 500; // 0.5%
 
 // ##################################################################
 //                        ADDRESSES
